@@ -1,25 +1,170 @@
 ---
 title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+author: "Yuan Wei"
+date: "August 19, 2016"
+output: html_document
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
 
-## Loading and preprocessing the data
 
+## Introduction
+
+This is a submission for Coursera Data Science Specilization, Reproducible Research - Peer Graded Assignment: Course Project 1. The Github repository for this project can be found [here](https://github.com/rdpeng/RepData_PeerAssessment1).
+
+Dplyr and ggplot2 pakages are required for this analysis.
+
+```{r packages, message=FALSE, warning=FALSE}
+require(ggplot2)
+require(dplyr)
+```
+
+
+## Loading & Processing Data
+
+Read data from raw data in  working directory:
+```{r}
+
+file <- read.csv(file = "activity.csv", header = TRUE, col.names = c("Steps", "Date", "Interval"))
+clean.file <- file[complete.cases(file),]
+
+```
+
+Calculate the total number of steps taken per day and plot a histogram
+```{r, fig.width=10, fig.height=4}
+steps.per.day.array <- tapply(file$Steps, file$Date, sum, na.rm=TRUE)
+steps.per.day <- data.frame(names(steps.per.day.array), steps.per.day.array, row.names = NULL)
+names(steps.per.day) <- c("Date", "Steps")
+
+g <- ggplot(steps.per.day, aes(Steps))
+g + geom_histogram(color = "blue", fill = "white", binwidth = 1000) +
+  ggtitle("Steps per day") +
+  xlab("Steps") +
+  ylab("Frequency")
+```
 
 
 ## What is mean total number of steps taken per day?
-
+```{r}
+summary(steps.per.day$Steps)
+```
 
 
 ## What is the average daily activity pattern?
+```{r, fig.width=10, fig.height=4}
+ave.steps <- clean.file %>%
+              group_by(Interval) %>%
+              summarise(avg = mean(Steps))
+
+g2 <- ggplot(ave.steps, aes(Interval, avg))
+g2 + 
+  geom_line() +
+  xlab("Interval") +
+  ylab("Average number of steps per day")
+```
+
+Maximum number of steps
+```{r}
+max.step <- filter(ave.steps, avg==max(ave.steps$avg))
+max.step
+```
 
 
+## Inputing missing values
+Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs)
+```{r}
+no.na <- nrow(file[!complete.cases(file),])
+no.na
+```
 
-## Imputing missing values
+Filling in all of the missing values in the dataset using means of day.
+```{r}
+ave.steps.per.day <- clean.file %>%
+                      group_by(Date) %>%
+                      summarise(avg = mean(Steps))
+ave.steps.per.day <- rbind(ave.steps.per.day, c("2012-10-01", 0))
+ 
+findvalue <- function(row) {
+  test <- length(ave.steps.per.day$avg[grep(as.character(fill.file$Date[row]), ave.steps.per.day$Date)])
+  if (test == 0) {
+    return(0)
+  } else {
+    return(ave.steps.per.day$avg[grep(as.character(fill.file$Date[row]), ave.steps.per.day$Date)])
+  }
+}
 
+fill.file <- file
+for (row in 1:nrow(fill.file)) {
+  if (is.na(fill.file$Steps[row])) {
+    fill.file$Steps[row] <- as.numeric(findvalue(row))
+  }
+}
+```
 
+Check if new  dataset that is equal to the original dataset but with the missing data filled in.
+
+Initial data set with NAs :
+```{r}
+summary(steps.per.day$Steps)
+```
+
+New data set will filled value :
+```{r}
+new.steps.per.day.array <- tapply(fill.file$Steps, fill.file$Date, sum, na.rm=TRUE)
+new.steps.per.day <- data.frame(names(new.steps.per.day.array), new.steps.per.day.array, row.names = NULL)
+names(new.steps.per.day) <- c("Date", "Steps")
+summary(new.steps.per.day$Steps)
+```
+
+Histogram of the total number of steps taken each day using new data set with replaced NAs
+```{r, fig.width=10, fig.height=4}
+fill.steps.per.day.array <- tapply(fill.file$Steps, fill.file$Date, sum, na.rm=TRUE)
+fill.steps.per.day <- data.frame(names(fill.steps.per.day.array), fill.steps.per.day.array, row.names = NULL)
+names(fill.steps.per.day) <- c("Date", "Steps")
+
+g3 <- ggplot(fill.steps.per.day, aes(Steps))
+g3 + geom_histogram(color = "red", fill = "white", binwidth = 1000) +
+    ggtitle("Steps per day") +
+    xlab("Steps") +
+    ylab("Frequency")
+```
+
+Based on the calculations and figure above, we can see that new data set with replaced NAs values has no impact on its mean, median and distribution.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+Plot containing a time series plot of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis):
+
+```{r, fig.width=10, fig.height=4}
+fill.file$Date <- as.Date(fill.file$Date)
+fill.file$Day <- weekdays(fill.file$Date)
+
+weekday <- filter(fill.file, Day == "Monday" | Day == "Tuesday" | Day == "Wednesday" | Day == "Thursday" | Day == "Friday")
+
+weekend <- filter(fill.file, Day == "Saturday" | Day == "Sunday")
+
+weekday.ave.steps <- weekday %>%
+              group_by(Interval) %>%
+              summarise(avg = mean(Steps)) %>%
+              cbind("Weekday")
+names(weekday.ave.steps) <- c("Interval", "avg", "daysofweek")
+
+weekend.ave.steps <- weekend %>%
+              group_by(Interval) %>%
+              summarise(avg = mean(Steps)) %>%
+              cbind("Weekend")
+names(weekend.ave.steps) <- c("Interval", "avg", "daysofweek")
+
+week.ave.steps <- rbind(weekday.ave.steps, weekend.ave.steps)
+
+g4 <- ggplot(week.ave.steps, aes(Interval, avg)) + 
+        geom_line() +
+        xlab("Interval") +
+        ylab("Average number of steps per day")
+
+g4 + facet_grid(daysofweek ~ .)
+```
+
+
